@@ -16,3 +16,6 @@ order: 1
 - Try to adapt trillion rules defined by TDD gurus
 - Fail miserably.
 - Repeat
+
+
+TDD: Test-Driven Development
