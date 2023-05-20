@@ -1,11 +1,11 @@
 ---
-title: Finding why my rust program was not exiting feat. Tokio
+title: Why my rust program is not exiting (feat. Tokio)
 order: -1
 ---
 
 # Why my rust program is not exiting (feat. Tokio)
 
-I've been recently working on random [side project](https://github.com/nkitsaini/waper) and wanted to provide a REPL like interface in the program. I was using `tokio` all over my code and decided to use `tokio::io::Stdin` for building this REPL too. Everything was working except my program was not exiting, and this is a story of how I found it out. 
+I've been recently working on random [side project](https://github.com/nkitsaini/waper) and wanted to provide a REPL like interface in the program. I was using `tokio` all over my code and decided to use `tokio::io::Stdin` for building this REPL too. Everything was working except my program was not exiting. This is a story about how I figured out why my program was not exiting. 
 
 
 ## The code
@@ -46,18 +46,18 @@ A lot of people might have already got what is happening here, and if you are on
 </aside>
 
 ## The journey
-Well, the first step of journey was to determine if I should try to figure the answer out or just use some other way to implement REPL and call it done. Since I'd never looked at any `async` runtime implementation before, I though debugging this would make me less afraid of what is behind the curtains of `tokio`.
+The first step of journey was to determine if I should try to figure the answer out or just use some other way to implement REPL and call it done. Since I'd never looked at any `async` runtime implementation before, I though debugging this would make me less afraid of what is behind the curtains of `tokio`.
 
 As with any debugging journey, the goal was to remove as much code as possible which can still reproduce the issue.
 
 
-1. I tried removing my `Orchestrator.start()` with a `tokio::time::sleep()` and the issue was still there, which means that it was not my code somehow keeping the process alive. **does_not_exit**
+1. I tried removing my `Orchestrator.start()` with a `tokio::time::sleep()` and the issue was still there, which means that it was not my code somehow keeping the process alive. **It does not exit.**
 
-2. Next magic I could see was the `#[tokio::main]` proc macro. The only that I know about proc macros is that they are very powerful. So I removed the macro and manually created the runtime and made a single thread. **does_not_exit**
+2. Next magic I could see was the `#[tokio::main]` proc macro. The only that I know about proc macros is that they are very powerful. So I removed the macro and manually created the runtime and made a single thread. **It does not exit.**
 
-3. The `cli.reader` had three type layers `Lines`, `BufReader`, `Stdin`. I removed `Lines` and `BufReader` and the code was still not exiting. **does_not_exit**
+3. The `cli.reader` had three type layers `Lines`, `BufReader`, `Stdin`. I removed `Lines` and `BufReader` and the code was still not exiting. **It does not exit.**
 
-4. Replace `Stdin` with `Timeout`. _exists_
+4. Replace `Stdin` with `Timeout`. **It exits!**
 
 If I removed `Stdin` the code was exiting as expected. So I was getting somewhere.
 
@@ -94,7 +94,7 @@ Returning from main function
 
 Now there are no macros, everything is regular rust function.  `Orchestrator`, `Lines` and `BufReader` are not a suspect anymore.
 
-Next task was to go into `block_on` and see if I can find something that might block the process. I specifically added logs all over in [block_on](https://github.com/tokio-rs/tokio/blob/master/tokio/src/runtime/runtime.rs#L290), [exec.block_on](https://github.com/tokio-rs/tokio/blob/master/tokio/src/runtime/runtime.rs#LL311C52-L311C60) and some more nested function. 
+Next task was to go into `block_on` and see if I can find something that might block the process. I specifically added logs all over in [block_on](https://github.com/tokio-rs/tokio/blob/f64a1a3dbde9af86dfdf1e9b919a43111f2d1c23/tokio/src/runtime/runtime.rs#L290), [exec.block_on](https://github.com/tokio-rs/tokio/blob/f64a1a3dbde9af86dfdf1e9b919a43111f2d1c23/tokio/src/runtime/runtime.rs#LL311C52-L311C60) and some more nested function. 
 
 All of them were returning without any issue. Next I tried replacing `block_on` with a dummy implementation in `tokio` and called my implementation instead of original `block_on`.
 
@@ -108,7 +108,7 @@ impl Runtime {
 	}
 }
 ```
-The code was exiting after this change and I started removing stuff from the [block_on](https://github.com/tokio-rs/tokio/blob/master/tokio/src/runtime/runtime.rs#L290) function and reduced it to the point where I knew that the [exec.block_on](https://github.com/tokio-rs/tokio/blob/master/tokio/src/runtime/runtime.rs#LL311C52-L311C60) was doing something.
+The code was exiting after this change and I started removing stuff from the [block_on](https://github.com/tokio-rs/tokio/blob/f64a1a3dbde9af86dfdf1e9b919a43111f2d1c23/tokio/src/runtime/runtime.rs#L290) function and reduced it to the point where I knew that the [exec.block_on](https://github.com/tokio-rs/tokio/blob/f64a1a3dbde9af86dfdf1e9b919a43111f2d1c23/tokio/src/runtime/runtime.rs#LL311C52-L311C60) was doing something.
 
 <aside>
 At this point, I also copied the tokio source inside my project as I expected to make a lot of changes there, and did not want to pollute the shared tokio crate on my system.
@@ -130,7 +130,7 @@ Of course, it was `Drop` all along. It all made sense.
 For those who don't know, you can implement Drop trait on any type in rust and execute some code before the type is Dropped by rust.
 </aside>
 
-Next thing was to find out which `Drop` implementation was blocking. I checked `Drop` for [Runtime](https://github.com/tokio-rs/tokio/blob/master/tokio/src/runtime/runtime.rs#L419) and strangely it was returning fine without blocking. 
+Next thing was to find out which `Drop` implementation was blocking. I checked `Drop` for [Runtime](https://github.com/tokio-rs/tokio/blob/f64a1a3dbde9af86dfdf1e9b919a43111f2d1c23/tokio/src/runtime/runtime.rs#L419) and strangely it was returning fine without blocking. 
 
 Defeated I referred to rust docs regarding [Drop](https://doc.rust-lang.org/std/ops/trait.Drop.html). Following part was of interest
 ```
@@ -140,7 +140,7 @@ This destructor consists of two components:
 -   The automatically generated “drop glue” which recursively calls the destructors of all the fields of this value.
 ```
 In our case call to `Drop::drop` was completed, so it was one of the [fields of Runtime](https://github.com/tokio-rs/tokio/blob/f64a1a3dbde9af86dfdf1e9b919a43111f2d1c23/tokio/src/runtime/runtime.rs#L66) struct which was blocking the drop.
-```
+```rust
 pub struct Runtime {
     scheduler: Scheduler,
     handle: Handle,
@@ -193,7 +193,7 @@ pub fn stdin() -> Stdin {
 
 ## Ending notes
 Even though the final answer is little disappointing, I did find a few things throughout the journey
-1. `tokio` allows to create futures which can keep the `tokio::Runtime` alive even when the `Future` not specifically being `awaited` on.
+1. `tokio` allows to create futures which can keep the `tokio::Runtime` alive even when the `Future` is not specifically being `awaited` on.
 2. `tokio` is using `oneshot::Reciever/Sender` to detect if all children died. A clever trick. It shares the `Arc<oneshot::Sender>` with all the children. And on the receiver side instead of waiting for data it waits for an `Err` to occur, which signifies that no more `Sender` are alive.
 3. Rust drop can sneakily do stuff. And can be used to indefinitely wait. (This I knew, but didn't knew).
 4. `tokio::io::Stdin` should not be used for interactive applications directly.
