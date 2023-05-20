@@ -59,7 +59,7 @@ As with any debugging journey, the goal was to remove as much code as possible w
 
 4. Replace `Stdin` with `Timeout`. **It exits!**
 
-If I removed `Stdin` the code was exiting as expected. So I was getting somewhere.
+If I remove `Stdin` the code was exiting as expected. So I was getting somewhere.
 
 At this point code looked like this:
 ```rust
