@@ -46,7 +46,7 @@ A lot of people might have already got what is happening here, and if you are on
 </aside>
 
 ## The journey
-The first step of journey was to determine if I should try to figure the answer out or just use some other way to implement REPL and call it done. Since I'd never looked at any `async` runtime implementation before, I though debugging this would make me less afraid of what is behind the curtains of `tokio`.
+The first step of journey was to determine if I should try to figure the answer out or just use some other way to implement REPL and call it done. Since I'd never looked at any `async` runtime implementation before, I thought debugging this would make me less afraid of what is behind the curtains of `tokio`.
 
 As with any debugging journey, the goal was to remove as much code as possible which can still reproduce the issue.
 
@@ -189,7 +189,7 @@ pub fn stdin() -> Stdin {
 	}
 }
 ```
- Only if I would've RTFM. It clearly mentions that this will block and you should not use it for interactive stuff. Even though a little disappointed that it was me all along, I was glad that I figured the thing out instead of just hoping that it's some bug somewhere and let me just temporarily get around it.
+ Only if I would've [RTFM](https://en.wikipedia.org/wiki/RTFM). It clearly mentions that this will block and you should not use it for interactive stuff. Even though a little disappointed that it was me all along, I was glad that I figured the thing out instead of just hoping that it's some bug somewhere and let me just temporarily get around it.
 
 ## Ending notes
 Even though the final answer is little disappointing, I did find a few things throughout the journey
